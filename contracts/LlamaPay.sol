@@ -63,14 +63,15 @@ contract LlamaPay {
         payer.lastPayerUpdate = uint40(block.timestamp);
         payer.totalPaidPerSec += amountPerSec;
 
-        // checking that no overflow will ever happen on totalPaidPerSec is important because if there's an overflow later
-        // if we don't have overflow checks -> it would be possible to steal money from other people
-        // if there are overflow checks -> money will be stuck forever as all txs (from payees of the same payer) will revert
-        //   which can be used to rug employees and make them unable to withdraw their earnings
+        // checking that no overflow will ever happen on totalPaidPerSec is important because if there's an overflow later:
+        //   - if we don't have overflow checks -> it would be possible to steal money from other people
+        //   - if there are overflow checks -> money will be stuck forever as all txs (from payees of the same payer) will revert
+        //     which can be used to rug employees and make them unable to withdraw their earnings
         // Thus it's extremely important that no user is allowed to enter any value that later on could trigger an overflow.
         // We implicitly prevent this here because amountPerSec/totalPaidPerSec is uint216 and is only ever multiplied by timestamps
         // which will always fit in a uint40. Thus the result of the multiplication will always fit inside a uint256 and never overflow
-        // This however introduces a new invariant: only operations that can be done with amountPerSec/totalPaidPerSec are muls against timestamps
+        // This however introduces a new invariant: the only operations that can be done with amountPerSec/totalPaidPerSec are muls against timestamps
+        // and we need to make sure they happen in uint256 contexts, not any other
         emit StreamCreated(msg.sender, to, amountPerSec, streamId);
     }
 
