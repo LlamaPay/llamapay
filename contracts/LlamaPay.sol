@@ -15,34 +15,25 @@ interface IERC20WithDecimals {
 // All amountPerSec and all internal numbers use 20 decimals, these are converted to the right decimal on withdrawal/deposit
 // The reason for that is to minimize precision errors caused by integer math on tokens with low decimals (eg: USDC)
 
-/*
-    It's possible to optimize further by making all multiplications against totalPaidPerSec[from] unchecked,
-    however this introduces an attack vector that makes it possible to steal other people's money by overflowing these operations.
-    The gist is that this attack would require sending >1bn txs calling createStream() so it's very unrealistic.
-    However we don't make that optimization.
-
-    This same attack also makes it possible to increase totalPaidPerSec[from] so much that any withdraw() calls from payees will revert
-    however this only affects payees of the attacker and there will be plenty of time to withdraw() your money when the attack starts,
-    so we apply this optimization. The only point of this would be to prevent the people you are paying from withrawing their earnings,
-    but you can't get the money back and you'll need to spend a very long time and resources to execute.
-
-    On Ethereum this attack would require owning all full blocks for 243 consecutive days.
-*/
-
 // Invariant through the whole contract: lastPayerUpdate[anyone] <= block.timestamp
 // Reason: timestamps can't go back in time (https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L274)
+// and we always set lastPayerUpdate[anyone] either to the current block.timestamp or a value lower than it
 
 contract LlamaPay {
+    struct Payer {
+        uint40 lastPayerUpdate; // we will only hit overflow in year 231,800 so no need to worry
+        uint216 totalPaidPerSec; // uint216 is enough to hold 1M streams of 3e51 tokens/yr, which is enough
+    }
+
     mapping (bytes32 => uint) public streamToStart;
-    mapping (address => uint) public totalPaidPerSec;
-    mapping (address => uint) public lastPayerUpdate;
-    mapping (address => uint) public balances;
+    mapping (address => Payer) public payers;
+    mapping (address => uint) public balances; // could be packed together with lastPayerUpdate but gains are not high
     IERC20 immutable public token;
     address immutable public factory;
     uint immutable public DECIMALS_DIVISOR;
 
-    event StreamCreated(address indexed from, address indexed to, uint amountPerSec, bytes32 streamId);
-    event StreamCancelled(address indexed from, address indexed to, uint amountPerSec, bytes32 streamId);
+    event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
+    event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
 
     constructor(address _token, address _factory){
         token = IERC20(_token);
@@ -51,48 +42,36 @@ contract LlamaPay {
         DECIMALS_DIVISOR = 10**(20 - tokenDecimals);
     }
 
-    function getStreamId(address from, address to, uint amountPerSec) public pure returns (bytes32){
+    function getStreamId(address from, address to, uint216 amountPerSec) public pure returns (bytes32){
         return keccak256(abi.encodePacked(from, to, amountPerSec));
     }
 
-    function updateBalances(address payer) private {
-        uint delta;
-        unchecked {
-            delta = block.timestamp - lastPayerUpdate[payer];
-        }
-        uint totalPaid = delta * totalPaidPerSec[payer]; // OPTIMIZATION: unchecked
-        balances[payer] -= totalPaid; // implicit check that balance >= totalPaid
-        lastPayerUpdate[payer] = block.timestamp;
-    }
-
-    function createStream(address to, uint amountPerSec) public {
+    function createStream(address to, uint216 amountPerSec) public {
         bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
-        // this checks that even if:
-        // - each person earns 10B/sec
-        // - each person will be earning for 1000 years
-        // - there are 1B people earning (requires 1B txs)
-        // there won't be an overflow in all those 1k years
-        // checking for overflow is important because if there's an overflow later money will be stuck forever as all txs will revert
-        // this can be used to rug employees by pushing totalPaidPerSec[from] to a high number, making txs revert
-        unchecked {
-            require(amountPerSec < type(uint).max/(10e9 * 1e3 * 365 days * 1e9), "no overflow");
-        }
         require(amountPerSec > 0, "amountPerSec can't be 0");
         require(streamToStart[streamId] == 0, "stream already exists");
         streamToStart[streamId] = block.timestamp;
-        updateBalances(msg.sender); // can't create a new stream unless there's no debt
-        totalPaidPerSec[msg.sender] += amountPerSec; // OPTIMIZATION: unchecked
-        emit StreamCreated(msg.sender, to, amountPerSec, streamId);
-    }
 
-    function cancelStream(address to, uint amountPerSec) public {
-        withdraw(msg.sender, to, amountPerSec);
-        bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
-        streamToStart[streamId] = 0;
-        unchecked{
-            totalPaidPerSec[msg.sender] -= amountPerSec;
+        Payer storage payer = payers[msg.sender];
+        uint totalPaid;
+        unchecked {
+            uint delta = block.timestamp - payer.lastPayerUpdate;
+            totalPaid = delta * uint(payer.totalPaidPerSec);
         }
-        emit StreamCancelled(msg.sender, to, amountPerSec, streamId);
+        balances[msg.sender] -= totalPaid; // implicit check that balance >= totalPaid, can't create a new stream unless there's no debt
+
+        payer.lastPayerUpdate = uint40(block.timestamp);
+        payer.totalPaidPerSec += amountPerSec;
+
+        // checking that no overflow will ever happen on totalPaidPerSec is important because if there's an overflow later
+        // if we don't have overflow checks -> it would be possible to steal money from other people
+        // if there are overflow checks -> money will be stuck forever as all txs (from payees of the same payer) will revert
+        //   which can be used to rug employees and make them unable to withdraw their earnings
+        // Thus it's extremely important that no user is allowed to enter any value that later on could trigger an overflow.
+        // We implicitly prevent this here because amountPerSec/totalPaidPerSec is uint216 and is only ever multiplied by timestamps
+        // which will always fit in a uint40. Thus the result of the multiplication will always fit inside a uint256 and never overflow
+        // This however introduces a new invariant: only operations that can be done with amountPerSec/totalPaidPerSec are muls against timestamps
+        emit StreamCreated(msg.sender, to, amountPerSec, streamId);
     }
 
     /*
@@ -115,68 +94,128 @@ contract LlamaPay {
     */
 
     // Make it possible to withdraw on behalf of others, important for people that don't have a metamask wallet (eg: cex address, trustwallet...)
-    function withdraw(address from, address to, uint amountPerSec) public {
-        bytes32 streamId = getStreamId(from, to, amountPerSec);
+    function _withdraw(address from, address to, uint216 amountPerSec) private returns (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) {
+        streamId = getStreamId(from, to, amountPerSec);
         require(streamToStart[streamId] != 0, "stream doesn't exist");
 
-        uint payerDelta = block.timestamp - lastPayerUpdate[from];
-        uint totalPayerPayment = payerDelta * totalPaidPerSec[from];
+        Payer storage payer = payers[from];
+        uint totalPayerPayment;
+        unchecked{
+            uint payerDelta = block.timestamp - payer.lastPayerUpdate;
+            totalPayerPayment = payerDelta * uint(payer.totalPaidPerSec);
+        }
         uint payerBalance = balances[from];
-        uint lastUpdate;
         if(payerBalance >= totalPayerPayment){
             unchecked {
                 balances[from] = payerBalance - totalPayerPayment;   
             }
-            lastUpdate = block.timestamp;
+            lastUpdate = uint40(block.timestamp);
         } else {
             // invariant: totalPaidPerSec[from] != 0
             unchecked {
-                uint timePaid = payerBalance/totalPaidPerSec[from];
-                lastUpdate = lastPayerUpdate[from] + timePaid;
+                uint timePaid = payerBalance/uint(payer.totalPaidPerSec);
+                lastUpdate = uint40(payer.lastPayerUpdate + timePaid);
                 // invariant: lastUpdate < block.timestamp (we need to maintain it)
-                balances[from] = payerBalance % totalPaidPerSec[from];
+                balances[from] = payerBalance % uint(payer.totalPaidPerSec);
             }
         }
-        lastPayerUpdate[from] = lastUpdate;
-        uint delta = lastUpdate - streamToStart[streamId];
-        streamToStart[streamId] = lastUpdate;
-        token.transfer(to, (delta*amountPerSec)/DECIMALS_DIVISOR);
+        uint delta = lastUpdate - streamToStart[streamId]; // Could use unchecked here too I think
+        unchecked {
+            // We push transfers to be done outside this function and at the end of public functions to avoid reentrancy exploits
+            amountToTransfer = (delta*uint(amountPerSec))/DECIMALS_DIVISOR;
+        }
     }
 
-    function modifyStream(address oldTo, uint oldAmountPerSec, address to, uint amountPerSec) external {
+    // Copy of _withdraw that is view-only and returns how much can be withdrawn from a stream, purely for convenience on frontend
+    // No need to review since this does nothing
+    function withdrawable(address from, address to, uint216 amountPerSec) external view returns (uint withdrawableAmount, uint lastUpdate, uint owed) {
+        bytes32 streamId = getStreamId(from, to, amountPerSec);
+        require(streamToStart[streamId] != 0, "stream doesn't exist");
+
+        Payer storage payer = payers[from];
+        uint totalPayerPayment;
+        unchecked{
+            uint payerDelta = block.timestamp - payer.lastPayerUpdate;
+            totalPayerPayment = payerDelta * uint(payer.totalPaidPerSec);
+        }
+        uint payerBalance = balances[from];
+        if(payerBalance >= totalPayerPayment){
+            lastUpdate = block.timestamp;
+        } else {
+            unchecked {
+                uint timePaid = payerBalance/uint(payer.totalPaidPerSec);
+                lastUpdate = payer.lastPayerUpdate + timePaid;
+            }
+        }
+        uint delta = lastUpdate - streamToStart[streamId];
+        withdrawableAmount = (delta*uint(amountPerSec))/DECIMALS_DIVISOR;
+        owed = ((block.timestamp - lastUpdate)*uint(amountPerSec))/DECIMALS_DIVISOR;
+    }
+
+    function withdraw(address from, address to, uint216 amountPerSec) external {
+        (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) = _withdraw(from, to, amountPerSec);
+        streamToStart[streamId] = lastUpdate;
+        payers[from].lastPayerUpdate = lastUpdate;
+        token.transfer(to, amountToTransfer);
+    }
+
+    function cancelStream(address to, uint216 amountPerSec) public {
+        (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) = _withdraw(msg.sender, to, amountPerSec);
+        streamToStart[streamId] = 0;
+        Payer storage payer = payers[msg.sender];
+        unchecked{
+            // totalPaidPerSec is a sum of items which include amountPerSec, so totalPaidPerSec >= amountPerSec
+            payer.totalPaidPerSec -= amountPerSec;
+        }
+        payer.lastPayerUpdate = lastUpdate;
+        emit StreamCancelled(msg.sender, to, amountPerSec, streamId);
+        token.transfer(to, amountToTransfer);
+    }
+
+    function modifyStream(address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec) external {
         // Can be optimized but I don't think extra complexity is worth it
         cancelStream(oldTo, oldAmountPerSec);
         createStream(to, amountPerSec);
     }
 
-    function deposit(uint amount) external {
+    function deposit(uint amount) public {
         balances[msg.sender] += amount * DECIMALS_DIVISOR;
         token.transferFrom(msg.sender, address(this), amount);
     }
 
+    function depositAndCreate(uint amountToDeposit, address to, uint216 amountPerSec) external {
+        deposit(amountToDeposit);
+        createStream(to, amountPerSec);
+    }
+
     function withdrawPayer(uint amount) external {
+        Payer storage payer = payers[msg.sender];
         balances[msg.sender] -= amount; // implicit check that balance > amount
-        uint delta;
         unchecked {
-            delta = block.timestamp - lastPayerUpdate[msg.sender];
+            uint delta = block.timestamp - payer.lastPayerUpdate;
+            require(balances[msg.sender] >= delta*uint(payer.totalPaidPerSec), "pls no rug");
+            token.transfer(msg.sender, amount/DECIMALS_DIVISOR);
         }
-        require(balances[msg.sender] >= delta*totalPaidPerSec[msg.sender], "pls no rug");
-        token.transfer(msg.sender, amount/DECIMALS_DIVISOR);
     }
 
     function withdrawPayerAll() external {
-        uint delta;
+        Payer storage payer = payers[msg.sender];
+        uint totalPaid;
         unchecked {
-            delta = block.timestamp - lastPayerUpdate[msg.sender];
+            uint delta = block.timestamp - payer.lastPayerUpdate;
+            totalPaid = delta*uint(payer.totalPaidPerSec);
         }
-        balances[msg.sender] -= delta*totalPaidPerSec[msg.sender];
-        token.transfer(msg.sender, balances[msg.sender]/DECIMALS_DIVISOR);
+        balances[msg.sender] -= totalPaid;
+        unchecked {
+            token.transfer(msg.sender, balances[msg.sender]/DECIMALS_DIVISOR);
+        }
     }
 
-    function getPayerBalance(address payer) external view returns (int) {
-        int balance = int(balances[payer]);
-        uint delta = block.timestamp - lastPayerUpdate[payer];
-        return balance - int(delta*totalPaidPerSec[payer]);
+    function getPayerBalance(address payerAddress) external view returns (int) {
+        Payer storage payer = payers[payerAddress];
+        int balance = int(balances[payerAddress]);
+        uint delta = block.timestamp - payer.lastPayerUpdate;
+        return (balance - int(delta*uint(payer.totalPaidPerSec)))/int(DECIMALS_DIVISOR);
     }
 
     // Performs an arbitrary call
