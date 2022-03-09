@@ -47,8 +47,8 @@ contract LlamaPay {
     }
 
     function createStream(address to, uint216 amountPerSec) public {
-        bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
         require(amountPerSec > 0, "amountPerSec can't be 0");
+        bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
         require(streamToStart[streamId] == 0, "stream already exists");
         streamToStart[streamId] = block.timestamp;
 
@@ -101,7 +101,7 @@ contract LlamaPay {
 
         Payer storage payer = payers[from];
         uint totalPayerPayment;
-        unchecked{
+        unchecked {
             uint payerDelta = block.timestamp - payer.lastPayerUpdate;
             totalPayerPayment = payerDelta * uint(payer.totalPaidPerSec);
         }
@@ -135,7 +135,7 @@ contract LlamaPay {
 
         Payer storage payer = payers[from];
         uint totalPayerPayment;
-        unchecked{
+        unchecked {
             uint payerDelta = block.timestamp - payer.lastPayerUpdate;
             totalPayerPayment = payerDelta * uint(payer.totalPaidPerSec);
         }
@@ -164,7 +164,7 @@ contract LlamaPay {
         (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) = _withdraw(msg.sender, to, amountPerSec);
         streamToStart[streamId] = 0;
         Payer storage payer = payers[msg.sender];
-        unchecked{
+        unchecked {
             // totalPaidPerSec is a sum of items which include amountPerSec, so totalPaidPerSec >= amountPerSec
             payer.totalPaidPerSec -= amountPerSec;
         }
