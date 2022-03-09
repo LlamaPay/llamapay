@@ -47,6 +47,7 @@ contract LlamaPay {
     }
 
     function createStream(address to, uint216 amountPerSec) public {
+        require(to != address(this), "no naughty");
         require(amountPerSec > 0, "amountPerSec can't be 0");
         bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
         require(streamToStart[streamId] == 0, "stream already exists");
