@@ -5,6 +5,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./Adapter.sol";
 
+error NoOverflow();
+error AmountPerSecCantBeZero();
+error StreamAlreadyExists();
+error StreamDoesntExist();
+error DepositFailed();
+error PlsNoRug();
+error RefreshSetupFailed();
+
 contract LlamaPay is Ownable {
     mapping (bytes32 => uint) public streamToStart;
     mapping (address => uint) public totalPaidPerSec;
@@ -68,10 +76,13 @@ contract LlamaPay is Ownable {
         // there won't be an overflow in all those 1k years
         // checking for overflow is important because if there's an overflow later money will be stuck forever as all txs will revert
         unchecked {
-            require(amountPerSec < type(uint).max/(10e9 * 1e3 * 365 days * 1e9), "no overflow");
+            // require(amountPerSec < type(uint).max/(10e9 * 1e3 * 365 days * 1e9), "no overflow");
+            if (amountPerSec >= type(uint).max/(10e9 * 1e3 * 365 days * 1e9)) revert NoOverflow();
         }
-        require(amountPerSec > 0, "amountPerSec can't be 0");
-        require(streamToStart[streamId] == 0, "stream already exists");
+        // require(amountPerSec > 0, "amountPerSec can't be 0");
+        // require(streamToStart[streamId] == 0, "stream already exists");
+        if (amountPerSec <= 0) revert AmountPerSecCantBeZero();
+        if (streamToStart[streamId] != 0) revert StreamAlreadyExists();
         streamToStart[streamId] = block.timestamp;
         updateBalances(msg.sender); // can't create a new stream unless there's no debt
         totalPaidPerSec[msg.sender] += amountPerSec;
@@ -89,7 +100,8 @@ contract LlamaPay is Ownable {
     // Make it possible to withdraw on behalf of others, important for people that don't have a metamask wallet (eg: cex address, trustwallet...)
     function withdraw(address from, address to, uint amountPerSec) public {
         bytes32 streamId = getStreamId(from, to, amountPerSec);
-        require(streamToStart[streamId] != 0, "stream doesn't exist");
+        // require(streamToStart[streamId] != 0, "stream doesn't exist");
+        if (streamToStart[streamId] == 0) revert StreamDoesntExist();
 
         uint payerDelta = block.timestamp - lastPayerUpdate[from];
         uint totalPayerPayment = payerDelta * totalPaidPerSec[from];
@@ -124,7 +136,8 @@ contract LlamaPay is Ownable {
         (bool success,) = adapter.delegatecall(
             abi.encodeWithSelector(Adapter.deposit.selector, vault, amount)
         );
-        require(success, "deposit() failed");
+        // require(success, "deposit() failed");
+        if (!success) revert DepositFailed();
     }
 
     function withdrawPayer(uint amount) external {
@@ -133,7 +146,8 @@ contract LlamaPay is Ownable {
         unchecked {
             delta = block.timestamp - lastPayerUpdate[msg.sender]; // timestamps can't go back in time (https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L274)
         }
-        require(delta*totalPaidPerSec[msg.sender] >= balances[msg.sender], "pls no rug");
+        // require(delta*totalPaidPerSec[msg.sender] >= balances[msg.sender], "pls no rug");
+        if (delta*totalPaidPerSec[msg.sender] < balances[msg.sender]) revert PlsNoRug();
         uint prevBalance = token.balanceOf(address(this));
         withdrawFromVault(amount/lastPricePerShare[msg.sender]);
         uint newBalance = token.balanceOf(address(this));
@@ -144,14 +158,16 @@ contract LlamaPay is Ownable {
         (bool success,) = adapter.delegatecall(
             abi.encodeWithSelector(Adapter.withdraw.selector, vault, amount)
         );
-        require(success, "refreshSetup() failed");
+        // require(success, "refreshSetup() failed");
+        if (!success) revert RefreshSetupFailed();
     }
 
     function _refreshSetup(address _adapter, address _token, address _vault) private {
         (bool success,) = _adapter.delegatecall(
             abi.encodeWithSelector(Adapter.refreshSetup.selector, _token, _vault)
         );
-        require(success, "refreshSetup() failed");
+        // require(success, "refreshSetup() failed");
+        if (!success) revert RefreshSetupFailed();
     }
 
     function refreshSetup() public {
