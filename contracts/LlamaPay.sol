@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: None
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "hardhat/console.sol";
@@ -11,6 +11,12 @@ interface Factory {
 interface IERC20WithDecimals {
     function decimals() external view returns (uint8);
 }
+
+error AmountPerSecCannotBeZero();
+error StreamAlreadyExists();
+error StreamDoesntExist();
+error PlsNoRug();
+error NotTheOwner();
 
 // All amountPerSec and all internal numbers use 20 decimals, these are converted to the right decimal on withdrawal/deposit
 // The reason for that is to minimize precision errors caused by integer math on tokens with low decimals (eg: USDC)
@@ -48,8 +54,10 @@ contract LlamaPay {
 
     function createStream(address to, uint216 amountPerSec) public {
         bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
-        require(amountPerSec > 0, "amountPerSec can't be 0");
-        require(streamToStart[streamId] == 0, "stream already exists");
+        // require(amountPerSec > 0, "amountPerSec can't be 0");
+        // require(streamToStart[streamId] == 0, "stream already exists");
+        if (amountPerSec <= 0) revert AmountPerSecCannotBeZero();
+        if (streamToStart[streamId] != 0) revert StreamAlreadyExists();
         streamToStart[streamId] = block.timestamp;
 
         Payer storage payer = payers[msg.sender];
@@ -97,7 +105,8 @@ contract LlamaPay {
     // Make it possible to withdraw on behalf of others, important for people that don't have a metamask wallet (eg: cex address, trustwallet...)
     function _withdraw(address from, address to, uint216 amountPerSec) private returns (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) {
         streamId = getStreamId(from, to, amountPerSec);
-        require(streamToStart[streamId] != 0, "stream doesn't exist");
+        // require(streamToStart[streamId] != 0, "stream doesn't exist");
+        if (streamToStart[streamId] == 0) revert StreamDoesntExist();
 
         Payer storage payer = payers[from];
         uint totalPayerPayment;
@@ -131,7 +140,8 @@ contract LlamaPay {
     // No need to review since this does nothing
     function withdrawable(address from, address to, uint216 amountPerSec) external view returns (uint withdrawableAmount, uint lastUpdate, uint owed) {
         bytes32 streamId = getStreamId(from, to, amountPerSec);
-        require(streamToStart[streamId] != 0, "stream doesn't exist");
+        // require(streamToStart[streamId] != 0, "stream doesn't exist");
+        if (streamToStart[streamId] == 0) revert StreamDoesntExist();
 
         Payer storage payer = payers[from];
         uint totalPayerPayment;
@@ -194,7 +204,8 @@ contract LlamaPay {
         balances[msg.sender] -= amount; // implicit check that balance > amount
         unchecked {
             uint delta = block.timestamp - payer.lastPayerUpdate;
-            require(balances[msg.sender] >= delta*uint(payer.totalPaidPerSec), "pls no rug");
+            // require(balances[msg.sender] >= delta*uint(payer.totalPaidPerSec), "pls no rug");
+            if (balances[msg.sender] < delta*uint(payer.totalPaidPerSec)) revert PlsNoRug();
             token.transfer(msg.sender, amount/DECIMALS_DIVISOR);
         }
     }
@@ -222,7 +233,8 @@ contract LlamaPay {
     // Performs an arbitrary call
     // This will be under a heavy timelock and only used in case something goes very wrong (eg: with yield engine)
     function emergencyRug(address to, uint amount) external {
-        require(Factory(factory).owner() == msg.sender, "not owner");
+        // require(Factory(factory).owner() == msg.sender, "not owner");
+        if (Factory(factory).owner() != msg.sender) revert NotTheOwner();
         if(amount == 0){
             amount = token.balanceOf(address(this));
         }

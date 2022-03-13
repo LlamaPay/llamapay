@@ -38,7 +38,7 @@ describe("Factory", function () {
     expect(await token.balanceOf(llamaPay.address)).to.equal(amount);
     await expect(
       llamaPay.connect(attacker).emergencyRug(owner.address, amount)
-    ).to.be.revertedWith("not owner");
+    ).to.be.revertedWith("NotTheOwner()");
     await llamaPay.connect(owner).emergencyRug(owner.address, amount)
     expect(await token.balanceOf(llamaPay.address)).to.equal("0");
   })

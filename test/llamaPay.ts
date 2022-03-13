@@ -72,7 +72,7 @@ describe("LlamaPay", function () {
     it("can't withdraw on a cancelled stream", async ()=>{
         const {payer, payee, llamaPay, perSec} = await setupStream(5e3);
         await llamaPay.cancelStream(payee.address, perSec)
-        await expect(llamaPay.withdraw(payer.address, payee.address, perSec)).to.be.revertedWith("stream doesn't exist");
+        await expect(llamaPay.withdraw(payer.address, payee.address, perSec)).to.be.revertedWith("StreamDoesntExist()");
     })
     it("withdrawPayer works and if withdraw is called after less than perSec funds are left in contract", async ()=>{
         const {payer, payee, llamaPay, token, perSec} = await setupStream(10e3);
@@ -160,16 +160,16 @@ describe("LlamaPay", function () {
         const {payee, llamaPay} = await basicSetup();
         const perSec = "100000000000"
         llamaPay.createStream(payee.address, perSec)
-        await expect(llamaPay.createStream(payee.address, perSec)).to.be.revertedWith("stream already exists");
+        await expect(llamaPay.createStream(payee.address, perSec)).to.be.revertedWith("StreamAlreadyExists()");
     })
     it("can't withdraw from stream twice")
     it("withdraw while in debt and only get part of the tokens, do it twice from multiple addresses")
     it("can't create stream with 0 payment", async ()=>{
         const {payee, llamaPay} = await basicSetup();
-        await expect(llamaPay.createStream(payee.address, "0")).to.be.revertedWith("amountPerSec can't be 0");
+        await expect(llamaPay.createStream(payee.address, "0")).to.be.revertedWith("AmountPerSecCannotBeZero()");
     })
     it("can't cancel non-existent stream", async ()=>{
         const {payee, llamaPay} = await basicSetup();
-        await expect(llamaPay.cancelStream(payee.address, "1")).to.be.revertedWith("stream doesn't exist");
+        await expect(llamaPay.cancelStream(payee.address, "1")).to.be.revertedWith("StreamDoesntExist()");
     })
 })
