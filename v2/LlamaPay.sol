@@ -119,12 +119,12 @@ contract LlamaPay is Ownable {
     }
 
     function deposit(uint amount) external {
-        balances[msg.sender] += amount;
         token.transferFrom(msg.sender, address(this), amount);
         (bool success,) = adapter.delegatecall(
             abi.encodeWithSelector(Adapter.deposit.selector, vault, amount)
         );
         require(success, "deposit() failed");
+        balances[msg.sender] += amount;
     }
 
     function withdrawPayer(uint amount) external {
