@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 
-async function deploy(name: string, args: string[] = []) {
+export async function deploy(name: string, args: string[] = []) {
   const Contract = await ethers.getContractFactory(name);
   const contract = await Contract.deploy(...args);
   await contract.deployed();
