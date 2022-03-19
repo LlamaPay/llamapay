@@ -34,9 +34,9 @@ contract LlamaPay {
     event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
     event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
 
-    constructor(address _token, address _factory){
+    constructor(address _token){
         token = IERC20(_token);
-        factory = _factory;
+        factory = msg.sender;
         uint8 tokenDecimals = IERC20WithDecimals(_token).decimals();
         DECIMALS_DIVISOR = 10**(20 - tokenDecimals);
     }
