@@ -1,24 +1,87 @@
 //SPDX-License-Identifier: None
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "./LlamaPay.sol";
+import {LlamaPay} from "./LlamaPay.sol";
 
-contract LlamaPayFactory is Ownable {
-    mapping(address => address) public payContracts;
-    mapping(uint => address) public payContractsArray;
-    uint public payContractsArrayLength;
 
+contract LlamaPayFactory {
+    address constant OG_LLAMA = 0xeF21F3909275245CCF813F89774945E1EdCeb6ED; // 0xngmi.eth
+
+    address public owner;
+    address public futureOwner;
+    uint256 public getLlamaPayContractCount;
+    address[1000000000] public getLlamaPayContractByIndex; // 1 billion indices
+
+    event ApplyTransferOwnership(address oldOwner, address newOwner);
+    event CommitTransferOwnership(address futureOwner);
     event LlamaPayCreated(address token, address llamaPay);
 
-    function createPayContract(address _token) external returns (address newContract) {
-        require(payContracts[_token] == address(0), "already exists");
-        newContract = address(new LlamaPay(_token, address(this)));
-        payContracts[_token] = newContract;
-        payContractsArray[payContractsArrayLength] = newContract;
+    constructor() {
+        owner = OG_LLAMA;
+        emit ApplyTransferOwnership(address(0), OG_LLAMA);
+    }
+
+    /**
+        @notice Create a new Llama Pay Streaming instance for `_token`
+        @dev Instances are created deterministically via CREATE2 and duplicate
+            instances will cause a revert
+        @param _token The ERC20 token address for which a Llama Pay contract should be deployed
+        @return llamaPayContract The address of the newly created Llama Pay contract
+      */
+    function createLlamaPayContract(address _token) external returns (address llamaPayContract) {
+        // use CREATE2 so we can get a deterministic address based on the token
+        llamaPayContract = address(new LlamaPay{salt: bytes32(uint256(uint160(_token)))}(_token));
+        // CREATE2 can return address(0), add a check to verify this isn't the case
+        // See: https://eips.ethereum.org/EIPS/eip-1014
+        require(llamaPayContract != address(0));
+
+        // Append the new contract address to the array of deployed contracts
+        uint256 index = getLlamaPayContractCount;
+        getLlamaPayContractByIndex[index] = llamaPayContract;
         unchecked{
-            payContractsArrayLength++;
+            getLlamaPayContractCount = index + 1;
         }
-        emit LlamaPayCreated(_token, address(newContract));
+
+        emit LlamaPayCreated(_token, llamaPayContract);
+    }
+
+    /**
+      @notice Query the address of the Llama Pay contract for `_token` and whether it is deployed
+      @param _token An ERC20 token address
+      @return predictedAddress The deterministic address where the llama pay contract will be deployed for `_token`
+      @return isDeployed Boolean denoting whether the contract is currently deployed
+      */
+    function getLlamaPayContractByToken(address _token) external view returns(address predictedAddress, bool isDeployed){
+        predictedAddress = address(uint160(uint256(keccak256(abi.encodePacked(
+            bytes1(0xff),
+            address(this),
+            bytes32(uint256(uint160(_token))), // salt
+            keccak256(abi.encodePacked(
+                type(LlamaPay).creationCode,
+                _token
+            ))
+        )))));
+        isDeployed = predictedAddress.code.length != 0;
+    }
+
+    /**
+      @notice Commit the future owner of this factory contract
+      @dev Only callable by the current owner
+      @param _futureOwner The future owner
+      */
+    function commitTransferOwnership(address _futureOwner) external {
+        require(msg.sender == owner);
+        futureOwner = _futureOwner;
+        emit CommitTransferOwnership(_futureOwner);
+    }
+
+    /**
+      @notice Apply the transition of ownership
+      @dev Only callable by the future owner
+      */
+    function applyTransferOwnership() external {
+        require(msg.sender == futureOwner);
+        emit ApplyTransferOwnership(owner, msg.sender);
+        owner = msg.sender;
     }
 }
