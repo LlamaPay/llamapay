@@ -25,12 +25,16 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
 const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.4",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 1000,
+    ...(process.env.DEPLOY === "true" &&
+    {
+      settings: {
+        optimizer: {
+          enabled: true,
+          runs: 1000,
+        },
       },
-    },
+    }
+    )
   },
   networks: {
     ropsten: {
@@ -41,6 +45,11 @@ const config: HardhatUserConfig = {
     rinkeby: {
       url: process.env.RINKEBY_RPC,
       accounts: [process.env.PRIVATEKEY!]
+    },
+    kovan: {
+      url: "https://kovan.poa.network",
+      accounts: [process.env.PRIVATEKEY!],
+      gasMultiplier: 1.5,
     },
     hardhat: {
       forking: {

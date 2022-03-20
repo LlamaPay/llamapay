@@ -11,12 +11,10 @@ contract LlamaPayFactory is Ownable {
 
     event LlamaPayCreated(address token, address llamaPay);
 
-    address public token;
     function createPayContract(address _token) external returns (address newContract) {
         require(payContracts[_token] == address(0), "already exists");
-        token = _token;
         newContract = address(new LlamaPay());
-        delete token;
+        LlamaPay(newContract).init(_token);
         payContracts[_token] = newContract;
         payContractsArray[payContractsArrayLength] = newContract;
         unchecked{
