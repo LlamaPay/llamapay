@@ -6,9 +6,12 @@ import {LlamaPay} from "./LlamaPay.sol";
 
 contract LlamaPayFactory {
     address constant OG_LLAMA = 0xeF21F3909275245CCF813F89774945E1EdCeb6ED; // 0xngmi.eth
+    bytes32 constant INIT_CODEHASH = keccak256(type(LlamaPay).creationCode);
 
     address public owner;
     address public futureOwner;
+
+    address public parameter;
     uint256 public getLlamaPayContractCount;
     address[1000000000] public getLlamaPayContractByIndex; // 1 billion indices
 
@@ -29,8 +32,10 @@ contract LlamaPayFactory {
         @return llamaPayContract The address of the newly created Llama Pay contract
       */
     function createLlamaPayContract(address _token) external returns (address llamaPayContract) {
+        // set the parameter storage slot so the contract can query it
+        parameter = _token;
         // use CREATE2 so we can get a deterministic address based on the token
-        llamaPayContract = address(new LlamaPay{salt: bytes32(uint256(uint160(_token)))}(_token));
+        llamaPayContract = address(new LlamaPay{salt: bytes32(uint256(uint160(_token)))}());
         // CREATE2 can return address(0), add a check to verify this isn't the case
         // See: https://eips.ethereum.org/EIPS/eip-1014
         require(llamaPayContract != address(0));
@@ -55,11 +60,8 @@ contract LlamaPayFactory {
         predictedAddress = address(uint160(uint256(keccak256(abi.encodePacked(
             bytes1(0xff),
             address(this),
-            bytes32(uint256(uint160(_token))), // salt
-            keccak256(abi.encodePacked(
-                type(LlamaPay).creationCode,
-                _token
-            ))
+            bytes32(uint256(uint160(_token))),
+            INIT_CODEHASH
         )))));
         isDeployed = predictedAddress.code.length != 0;
     }
