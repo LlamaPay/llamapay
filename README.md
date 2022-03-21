@@ -47,9 +47,12 @@ Superfluid bot: https://polygonscan.com/address/0x759999a81fade877fe91ed4c09db45
 
 ----
 
-```
+```shell
+npm t
+npx hardhat coverage
 npx hardhat --network rinkeby deploy
 npx hardhat --network rinkeby etherscan-verify
+npx hardhat verify --network rinkeby DEPLOYED_CONTRACT_ADDRESS
 ```
 
 
