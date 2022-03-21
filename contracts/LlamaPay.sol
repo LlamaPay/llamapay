@@ -4,8 +4,8 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface Factory {
-    function owner() external returns (address);
-    function token() external returns (address);
+    function owner() external view returns (address);
+    function parameter() external view returns (address);
 }
 
 interface IERC20WithDecimals {
@@ -36,13 +36,9 @@ contract LlamaPay {
     event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
 
     constructor(){
+        token = IERC20(Factory(msg.sender).parameter());
         factory = msg.sender;
-    }
-
-    function init(address _token) external {
-        require(msg.sender == factory);
-        token = IERC20(_token);
-        uint8 tokenDecimals = IERC20WithDecimals(_token).decimals();
+        uint8 tokenDecimals = IERC20WithDecimals(address(token)).decimals();
         DECIMALS_DIVISOR = 10**(20 - tokenDecimals);
     }
 
