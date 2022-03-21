@@ -28,9 +28,9 @@ contract LlamaPay {
     mapping (bytes32 => uint) public streamToStart;
     mapping (address => Payer) public payers;
     mapping (address => uint) public balances; // could be packed together with lastPayerUpdate but gains are not high
-    IERC20 immutable public token;
+    IERC20 public token;
     address immutable public factory;
-    uint immutable public DECIMALS_DIVISOR;
+    uint public DECIMALS_DIVISOR;
 
     event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
     event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
