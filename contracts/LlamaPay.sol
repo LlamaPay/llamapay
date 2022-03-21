@@ -1,7 +1,8 @@
 //SPDX-License-Identifier: None
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 interface Factory {
     function owner() external view returns (address);
@@ -20,6 +21,8 @@ interface IERC20WithDecimals {
 // and we always set lastPayerUpdate[anyone] either to the current block.timestamp or a value lower than it
 
 contract LlamaPay {
+    using SafeERC20 for IERC20;
+
     struct Payer {
         uint40 lastPayerUpdate; // we will only hit overflow in year 231,800 so no need to worry
         uint216 totalPaidPerSec; // uint216 is enough to hold 1M streams of 3e51 tokens/yr, which is enough
@@ -157,7 +160,7 @@ contract LlamaPay {
         (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) = _withdraw(from, to, amountPerSec);
         streamToStart[streamId] = lastUpdate;
         payers[from].lastPayerUpdate = lastUpdate;
-        token.transfer(to, amountToTransfer);
+        token.safeTransfer(to, amountToTransfer);
     }
 
     function cancelStream(address to, uint216 amountPerSec) public {
@@ -170,7 +173,7 @@ contract LlamaPay {
         }
         payer.lastPayerUpdate = lastUpdate;
         emit StreamCancelled(msg.sender, to, amountPerSec, streamId);
-        token.transfer(to, amountToTransfer);
+        token.safeTransfer(to, amountToTransfer);
     }
 
     function modifyStream(address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec) external {
@@ -181,7 +184,7 @@ contract LlamaPay {
 
     function deposit(uint amount) public {
         balances[msg.sender] += amount * DECIMALS_DIVISOR;
-        token.transferFrom(msg.sender, address(this), amount);
+        token.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     function depositAndCreate(uint amountToDeposit, address to, uint216 amountPerSec) external {
@@ -195,7 +198,7 @@ contract LlamaPay {
         unchecked {
             uint delta = block.timestamp - payer.lastPayerUpdate;
             require(balances[msg.sender] >= delta*uint(payer.totalPaidPerSec), "pls no rug");
-            token.transfer(msg.sender, amount/DECIMALS_DIVISOR);
+            token.safeTransfer(msg.sender, amount/DECIMALS_DIVISOR);
         }
     }
 
@@ -208,7 +211,7 @@ contract LlamaPay {
         }
         balances[msg.sender] -= totalPaid;
         unchecked {
-            token.transfer(msg.sender, balances[msg.sender]/DECIMALS_DIVISOR);
+            token.safeTransfer(msg.sender, balances[msg.sender]/DECIMALS_DIVISOR);
         }
     }
 
@@ -226,6 +229,6 @@ contract LlamaPay {
         if(amount == 0){
             amount = token.balanceOf(address(this));
         }
-        token.transfer(to, amount);
+        token.safeTransfer(to, amount);
     }
 }
