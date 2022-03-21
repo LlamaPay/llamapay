@@ -101,7 +101,6 @@ describe("LlamaPay", function () {
         const statusAfter = await llamaPay.streamToStart(streamId)
         expect(statusAfter).to.eq("0")
     })
-    it("payer can't withdraw if it leaves code in debt")
     it("standard flow with multiple payees and payers", async ()=>{
         const {llamaPay, token, DECIMALS_DIVISOR} = await basicSetup();
         const [owner, payer, payee, payee2] = await ethers.getSigners();
@@ -126,6 +125,7 @@ describe("LlamaPay", function () {
         const afterBal = await token.balanceOf(payee.address);
 
         expect(prevBal).to.equal(afterBal);
+        // payer tries to steal by creating a new stream while in debt
         // Can't create new streams until debt is paid
         expect(llamaPay.connect(payer).createStream(payee2.address, monthly1k.mul(100))).to.be.revertedWith("aaaa")
         // Can't withdraw if there's debt
@@ -138,14 +138,32 @@ describe("LlamaPay", function () {
 
         await llamaPay.connect(payer).deposit(bg(1e3*1e18))
         const withdrawable2 = await llamaPay.withdrawable(payer.address, payee2.address, monthly1k.mul(10))
-        expect(withdrawable2.withdrawableAmount).to.eq(bg(500*1e18))
-        sameNum(withdrawable2.owed, 4.5e3, 1)
+        sameNum(withdrawable2.withdrawableAmount, 666.6666, 1)
+        sameNum(withdrawable2.owed, 4.333333e3, 0)
 
-        // TODO continue
+        const withdrawablePayee1 = await llamaPay.withdrawable(payer.address, payee.address, monthly1k.mul(5))
+        sameNum(withdrawablePayee1.withdrawableAmount, 333.333, 1)
+        sameNum(withdrawablePayee1.owed, 2.5e3-333.3, 0)
+
+        // payer rugs first payee by cancelling their stream
+        await llamaPay.connect(payer).cancelStream(payee.address, monthly1k.mul(5))
+        await balanceIs(token, payee.address, 5e3+333.33);
+        expect(llamaPay.withdraw(payer.address, payee.address, monthly1k.mul(5))).to.be.revertedWith("aaaa") // can't withdraw from stream anymore
+        const withdrawablePayee2AfterCancel = await llamaPay.withdrawable(payer.address, payee2.address, monthly1k.mul(10))
+        sameNum(withdrawablePayee2AfterCancel.owed, Number(withdrawable2.owed)/1e18, 1)
+
+        // extra debt from payee 2 is cancelled
+        sameNum(await llamaPay.getPayerBalance(payer.address), -4.333e3, 0);
+
+        await llamaPay.connect(payer).deposit(bg(10e3*1e18)) // payer deposits 10k
+        sameNum(await llamaPay.getPayerBalance(payer.address), 5.66666e3, 0); // 7.5k owed
+
+        const withdrawablePayee2Again = await llamaPay.withdrawable(payer.address, payee2.address, monthly1k.mul(10))
+        sameNum(withdrawablePayee2Again.withdrawableAmount, 5e3, 0);
+
+        await llamaPay.withdraw(payer.address, payee2.address, monthly1k.mul(10))
+        await balanceIs(token, payee2.address, 10000.04);
     })
-    it("payer goes into debt and repays it later")
-    it("payer goes into debt, payee withdraws, and later debt is repaid + another withdrawal")
-    it("stream cancelled while in debt")
     it("overflow triggered on totalPaidPerSec", async ()=>{
         const {payee, llamaPay, payee2} = await basicSetup();
         const perSecOverflow = BigNumber.from(2).pow(216).sub(5);
@@ -155,15 +173,12 @@ describe("LlamaPay", function () {
         await llamaPay.createStream(payee2.address, "2")
         await expect(llamaPay.createStream(payee2.address, "5")).to.be.revertedWith("");
     })
-    it("try to steal paid money by creating a new stream");
     it("can't overwrite stream", async ()=>{
         const {payee, llamaPay} = await basicSetup();
         const perSec = "100000000000"
         llamaPay.createStream(payee.address, perSec)
         await expect(llamaPay.createStream(payee.address, perSec)).to.be.revertedWith("stream already exists");
     })
-    it("can't withdraw from stream twice")
-    it("withdraw while in debt and only get part of the tokens, do it twice from multiple addresses")
     it("can't create stream with 0 payment", async ()=>{
         const {payee, llamaPay} = await basicSetup();
         await expect(llamaPay.createStream(payee.address, "0")).to.be.revertedWith("amountPerSec can't be 0");
