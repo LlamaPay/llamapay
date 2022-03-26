@@ -6,8 +6,8 @@ describe("Factory", function () {
   it("can't create the an instance for the same token twice", async function () {
     const { llamaPay, llamaPayFactory, token } = await deployAll({})
     await expect(
-      llamaPayFactory.createPayContract(token.address)
-    ).to.be.revertedWith("already exists");
+      llamaPayFactory.createLlamaPayContract(token.address)
+    ).to.be.revertedWith("");
   });
 
   it("array works", async function () {
@@ -19,14 +19,14 @@ describe("Factory", function () {
     ]
     const { llamaPay, llamaPayFactory, token } = await deployAll({});
     for(const tokenAddress of tokens){
-      expect(await llamaPayFactory.payContracts(tokenAddress)).to.equal("0x0000000000000000000000000000000000000000")
-      await llamaPayFactory.createPayContract(tokenAddress);
+      expect(await llamaPayFactory.getLlamaPayContractByToken(tokenAddress)).to.equal("0x0000000000000000000000000000000000000000")
+      await llamaPayFactory.createLlamaPayContract(tokenAddress);
     }
-    expect(await llamaPayFactory.payContractsArrayLength()).to.equal((tokens.length+1).toString())
+    expect(await llamaPayFactory.getLlamaPayContractCount()).to.equal((tokens.length+1).toString())
     tokens = [token.address].concat(tokens)
     for(let i =0; i<tokens.length; i++){
-      expect(await llamaPayFactory.payContractsArray(i)).not.to.equal("0x0000000000000000000000000000000000000000");
-      expect(await llamaPayFactory.payContracts(tokens[i])).not.to.equal("0x0000000000000000000000000000000000000000")
+      expect(await llamaPayFactory.getLlamaPayContractByIndex(i)).not.to.equal("0x0000000000000000000000000000000000000000");
+      expect(await llamaPayFactory.getLlamaPayContractByToken(tokens[i])).not.to.equal("0x0000000000000000000000000000000000000000")
     }
   });
 
