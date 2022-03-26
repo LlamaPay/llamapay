@@ -24,7 +24,7 @@ I used to handle payments by just sending transactions at the end of the month, 
 Cost to create a stream:
 | Protocol | Cost (Gwei) |
 |----------|-------------|
-| LlamaPay | 74,104
+| LlamaPay | 69,963
 | Sablier | 240,070
 | SuperFluid | 279,992
 
