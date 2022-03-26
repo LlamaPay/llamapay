@@ -5,7 +5,7 @@ import {LlamaPay} from "./LlamaPay.sol";
 
 
 contract LlamaPayFactory {
-    address constant OG_LLAMA = 0xeF21F3909275245CCF813F89774945E1EdCeb6ED; // 0xngmi.eth
+    address constant OG_LLAMA = 0x71a15Ac12ee91BF7c83D08506f3a3588143898B5; // 0xngmi
     bytes32 constant INIT_CODEHASH = keccak256(type(LlamaPay).creationCode);
 
     address public owner;
