@@ -38,7 +38,7 @@ contract LlamaPay is BoringBatchable {
 
     event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec);
     event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec);
-    event StreamModified(address from, address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec);
+    event StreamModified(address indexed from, address indexed oldTo, uint216 oldAmountPerSec, address indexed to, uint216 amountPerSec);
 
     constructor(){
         token = IERC20(Factory(msg.sender).parameter());
