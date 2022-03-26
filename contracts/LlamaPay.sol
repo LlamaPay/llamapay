@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {BoringBatchable} from "./fork/BoringBatchable.sol";
 
 interface Factory {
     function owner() external view returns (address);
@@ -20,7 +21,7 @@ interface IERC20WithDecimals {
 // Reason: timestamps can't go back in time (https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L274)
 // and we always set lastPayerUpdate[anyone] either to the current block.timestamp or a value lower than it
 
-contract LlamaPay {
+contract LlamaPay is BoringBatchable {
     using SafeERC20 for IERC20;
 
     struct Payer {
@@ -35,8 +36,9 @@ contract LlamaPay {
     address immutable public factory;
     uint public DECIMALS_DIVISOR;
 
-    event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
-    event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
+    event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec);
+    event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec);
+    event StreamModified(address from, address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec);
 
     constructor(){
         token = IERC20(Factory(msg.sender).parameter());
@@ -49,7 +51,7 @@ contract LlamaPay {
         return keccak256(abi.encodePacked(from, to, amountPerSec));
     }
 
-    function createStream(address to, uint216 amountPerSec) public {
+    function _createStream(address to, uint216 amountPerSec) internal {
         bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
         require(amountPerSec > 0, "amountPerSec can't be 0");
         require(streamToStart[streamId] == 0, "stream already exists");
@@ -75,7 +77,11 @@ contract LlamaPay {
         // which will always fit in a uint40. Thus the result of the multiplication will always fit inside a uint256 and never overflow
         // This however introduces a new invariant: the only operations that can be done with amountPerSec/totalPaidPerSec are muls against timestamps
         // and we need to make sure they happen in uint256 contexts, not any other
-        emit StreamCreated(msg.sender, to, amountPerSec, streamId);
+    }
+
+    function createStream(address to, uint216 amountPerSec) public {
+        _createStream(to, amountPerSec);
+        emit StreamCreated(msg.sender, to, amountPerSec);
     }
 
     /*
@@ -163,7 +169,7 @@ contract LlamaPay {
         token.safeTransfer(to, amountToTransfer);
     }
 
-    function cancelStream(address to, uint216 amountPerSec) public {
+    function _cancelStream(address to, uint216 amountPerSec) internal {
         (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) = _withdraw(msg.sender, to, amountPerSec);
         streamToStart[streamId] = 0;
         Payer storage payer = payers[msg.sender];
@@ -172,14 +178,19 @@ contract LlamaPay {
             payer.totalPaidPerSec -= amountPerSec;
         }
         payer.lastPayerUpdate = lastUpdate;
-        emit StreamCancelled(msg.sender, to, amountPerSec, streamId);
         token.safeTransfer(to, amountToTransfer);
+    }
+
+    function cancelStream(address to, uint216 amountPerSec) public {
+        _cancelStream(to, amountPerSec);
+        emit StreamCancelled(msg.sender, to, amountPerSec);
     }
 
     function modifyStream(address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec) external {
         // Can be optimized but I don't think extra complexity is worth it
-        cancelStream(oldTo, oldAmountPerSec);
-        createStream(to, amountPerSec);
+        _cancelStream(oldTo, oldAmountPerSec);
+        _createStream(to, amountPerSec);
+        emit StreamModified(msg.sender, oldTo, oldAmountPerSec, to, amountPerSec);
     }
 
     function deposit(uint amount) public {
