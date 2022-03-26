@@ -36,9 +36,9 @@ contract LlamaPay is BoringBatchable {
     address immutable public factory;
     uint public DECIMALS_DIVISOR;
 
-    event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec);
-    event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec);
-    event StreamModified(address indexed from, address indexed oldTo, uint216 oldAmountPerSec, address indexed to, uint216 amountPerSec);
+    event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
+    event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
+    event StreamModified(address indexed from, address indexed oldTo, uint216 oldAmountPerSec, bytes32 oldStreamId, address indexed to, uint216 amountPerSec, bytes32 newStreamId);
 
     constructor(){
         token = IERC20(Factory(msg.sender).parameter());
@@ -51,8 +51,8 @@ contract LlamaPay is BoringBatchable {
         return keccak256(abi.encodePacked(from, to, amountPerSec));
     }
 
-    function _createStream(address to, uint216 amountPerSec) internal {
-        bytes32 streamId = getStreamId(msg.sender, to, amountPerSec);
+    function _createStream(address to, uint216 amountPerSec) internal returns (bytes32 streamId){
+        streamId = getStreamId(msg.sender, to, amountPerSec);
         require(amountPerSec > 0, "amountPerSec can't be 0");
         require(streamToStart[streamId] == 0, "stream already exists");
         streamToStart[streamId] = block.timestamp;
@@ -80,8 +80,8 @@ contract LlamaPay is BoringBatchable {
     }
 
     function createStream(address to, uint216 amountPerSec) public {
-        _createStream(to, amountPerSec);
-        emit StreamCreated(msg.sender, to, amountPerSec);
+        bytes32 streamId = _createStream(to, amountPerSec);
+        emit StreamCreated(msg.sender, to, amountPerSec, streamId);
     }
 
     /*
@@ -169,8 +169,9 @@ contract LlamaPay is BoringBatchable {
         token.safeTransfer(to, amountToTransfer);
     }
 
-    function _cancelStream(address to, uint216 amountPerSec) internal {
-        (uint40 lastUpdate, bytes32 streamId, uint amountToTransfer) = _withdraw(msg.sender, to, amountPerSec);
+    function _cancelStream(address to, uint216 amountPerSec) internal returns (bytes32 streamId) {
+        uint40 lastUpdate; uint amountToTransfer;
+        (lastUpdate, streamId, amountToTransfer) = _withdraw(msg.sender, to, amountPerSec);
         streamToStart[streamId] = 0;
         Payer storage payer = payers[msg.sender];
         unchecked{
@@ -182,15 +183,15 @@ contract LlamaPay is BoringBatchable {
     }
 
     function cancelStream(address to, uint216 amountPerSec) public {
-        _cancelStream(to, amountPerSec);
-        emit StreamCancelled(msg.sender, to, amountPerSec);
+        bytes32 streamId = _cancelStream(to, amountPerSec);
+        emit StreamCancelled(msg.sender, to, amountPerSec, streamId);
     }
 
     function modifyStream(address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec) external {
         // Can be optimized but I don't think extra complexity is worth it
-        _cancelStream(oldTo, oldAmountPerSec);
-        _createStream(to, amountPerSec);
-        emit StreamModified(msg.sender, oldTo, oldAmountPerSec, to, amountPerSec);
+        bytes32 oldStreamId = _cancelStream(oldTo, oldAmountPerSec);
+        bytes32 newStreamId = _createStream(to, amountPerSec);
+        emit StreamModified(msg.sender, oldTo, oldAmountPerSec, oldStreamId, to, amountPerSec, newStreamId);
     }
 
     function deposit(uint amount) public {
