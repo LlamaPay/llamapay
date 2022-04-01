@@ -221,9 +221,10 @@ contract LlamaPay is BoringBatchable {
             uint delta = block.timestamp - payer.lastPayerUpdate;
             totalPaid = delta*uint(payer.totalPaidPerSec);
         }
-        balances[msg.sender] -= totalPaid;
+        uint toPay = balances[msg.sender] - totalPaid;
+        balances[msg.sender] = 0;
         unchecked {
-            token.safeTransfer(msg.sender, balances[msg.sender]/DECIMALS_DIVISOR);
+            token.safeTransfer(msg.sender, toPay/DECIMALS_DIVISOR);
         }
     }
 
