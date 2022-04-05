@@ -204,7 +204,7 @@ contract LlamaPay is BoringBatchable {
         createStream(to, amountPerSec);
     }
 
-    function withdrawPayer(uint amount) external {
+    function withdrawPayer(uint amount) public {
         Payer storage payer = payers[msg.sender];
         balances[msg.sender] -= amount; // implicit check that balance > amount
         unchecked {
@@ -216,15 +216,9 @@ contract LlamaPay is BoringBatchable {
 
     function withdrawPayerAll() external {
         Payer storage payer = payers[msg.sender];
-        uint totalPaid;
         unchecked {
             uint delta = block.timestamp - payer.lastPayerUpdate;
-            totalPaid = delta*uint(payer.totalPaidPerSec);
-        }
-        uint toPay = balances[msg.sender] - totalPaid;
-        balances[msg.sender] = 0;
-        unchecked {
-            token.safeTransfer(msg.sender, toPay/DECIMALS_DIVISOR);
+            withdrawPayer(balances[msg.sender]-delta*uint(payer.totalPaidPerSec)); // Just helper function, nothing happens if number is wrong
         }
     }
 
