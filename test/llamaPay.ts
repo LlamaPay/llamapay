@@ -81,7 +81,7 @@ describe("LlamaPay", function () {
         expect(left).to.be.gt(bg(9.9999e3*1e18));
         await llamaPay.withdrawPayerAll();
         const left2 = await llamaPay.getPayerBalance(payer.address)
-        expect(left2).to.be.lt("0"); // negative because some seconds have gone since withdrawal
+        expect(left2).to.be.eq("0"); // negative because some seconds have gone since withdrawal
         expect(left2).to.be.gt(perSec.mul(-1));
         await llamaPay.withdraw(payer.address, payee.address, perSec);
         expect(await token.balanceOf(llamaPay.address)).to.be.lt(perSec)
