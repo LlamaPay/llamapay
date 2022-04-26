@@ -19,29 +19,14 @@ describe("Factory", function () {
     ]
     const { llamaPay, llamaPayFactory, token } = await deployAll({});
     for(const tokenAddress of tokens){
-      expect(await llamaPayFactory.getLlamaPayContractByToken(tokenAddress)).to.equal("0x0000000000000000000000000000000000000000")
+      expect((await llamaPayFactory.getLlamaPayContractByToken(tokenAddress)).isDeployed).to.equal(false)
       await llamaPayFactory.createLlamaPayContract(tokenAddress);
     }
     expect(await llamaPayFactory.getLlamaPayContractCount()).to.equal((tokens.length+1).toString())
     tokens = [token.address].concat(tokens)
     for(let i =0; i<tokens.length; i++){
       expect(await llamaPayFactory.getLlamaPayContractByIndex(i)).not.to.equal("0x0000000000000000000000000000000000000000");
-      expect(await llamaPayFactory.getLlamaPayContractByToken(tokens[i])).not.to.equal("0x0000000000000000000000000000000000000000")
+      expect((await llamaPayFactory.getLlamaPayContractByToken(tokens[i])).isDeployed).to.equal(true)
     }
   });
-
-  it("owner, and only owner, can rug", async ()=>{
-    const { llamaPay, llamaPayFactory, token } = await deployAll({});
-    const [owner, attacker] = await ethers.getSigners();
-    const amount = "100"
-    await token.transfer(llamaPay.address, amount)
-    expect(await token.balanceOf(llamaPay.address)).to.equal(amount);
-    await expect(
-      llamaPay.connect(attacker).emergencyRug(owner.address, "10")
-    ).to.be.revertedWith("not owner");
-    await llamaPay.connect(owner).emergencyRug(owner.address, "10")
-    expect(await token.balanceOf(llamaPay.address)).to.equal("90");
-    await llamaPay.connect(owner).emergencyRug(owner.address, "0")
-    expect(await token.balanceOf(llamaPay.address)).to.equal("0");
-  })
 });

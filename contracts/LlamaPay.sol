@@ -6,7 +6,6 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {BoringBatchable} from "./fork/BoringBatchable.sol";
 
 interface Factory {
-    function owner() external view returns (address);
     function parameter() external view returns (address);
 }
 
@@ -33,7 +32,6 @@ contract LlamaPay is BoringBatchable {
     mapping (address => Payer) public payers;
     mapping (address => uint) public balances; // could be packed together with lastPayerUpdate but gains are not high
     IERC20 public token;
-    address immutable public factory;
     uint public DECIMALS_DIVISOR;
 
     event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
@@ -43,7 +41,6 @@ contract LlamaPay is BoringBatchable {
 
     constructor(){
         token = IERC20(Factory(msg.sender).parameter());
-        factory = msg.sender;
         uint8 tokenDecimals = IERC20WithDecimals(address(token)).decimals();
         DECIMALS_DIVISOR = 10**(20 - tokenDecimals);
     }
@@ -229,15 +226,5 @@ contract LlamaPay is BoringBatchable {
         int balance = int(balances[payerAddress]);
         uint delta = block.timestamp - payer.lastPayerUpdate;
         return (balance - int(delta*uint(payer.totalPaidPerSec)))/int(DECIMALS_DIVISOR);
-    }
-
-    // Performs an arbitrary call
-    // This will be under a heavy timelock and only used in case something goes very wrong (eg: with yield engine)
-    function emergencyRug(address to, uint amount) external {
-        require(Factory(factory).owner() == msg.sender, "not owner");
-        if(amount == 0){
-            amount = token.balanceOf(address(this));
-        }
-        token.safeTransfer(to, amount);
     }
 }

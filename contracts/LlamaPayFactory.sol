@@ -5,24 +5,13 @@ import {LlamaPay} from "./LlamaPay.sol";
 
 
 contract LlamaPayFactory {
-    address constant OG_LLAMA = 0x71a15Ac12ee91BF7c83D08506f3a3588143898B5; // 0xngmi
     bytes32 constant INIT_CODEHASH = keccak256(type(LlamaPay).creationCode);
-
-    address public owner;
-    address public futureOwner;
 
     address public parameter;
     uint256 public getLlamaPayContractCount;
     address[1000000000] public getLlamaPayContractByIndex; // 1 billion indices
 
-    event ApplyTransferOwnership(address oldOwner, address newOwner);
-    event CommitTransferOwnership(address futureOwner);
     event LlamaPayCreated(address token, address llamaPay);
-
-    constructor() {
-        owner = OG_LLAMA;
-        emit ApplyTransferOwnership(address(0), OG_LLAMA);
-    }
 
     /**
         @notice Create a new Llama Pay Streaming instance for `_token`
@@ -64,26 +53,5 @@ contract LlamaPayFactory {
             INIT_CODEHASH
         )))));
         isDeployed = predictedAddress.code.length != 0;
-    }
-
-    /**
-      @notice Commit the future owner of this factory contract
-      @dev Only callable by the current owner
-      @param _futureOwner The future owner
-      */
-    function commitTransferOwnership(address _futureOwner) external {
-        require(msg.sender == owner);
-        futureOwner = _futureOwner;
-        emit CommitTransferOwnership(_futureOwner);
-    }
-
-    /**
-      @notice Apply the transition of ownership
-      @dev Only callable by the future owner
-      */
-    function applyTransferOwnership() external {
-        require(msg.sender == futureOwner);
-        emit ApplyTransferOwnership(owner, msg.sender);
-        owner = msg.sender;
     }
 }
