@@ -42,6 +42,7 @@ contract LlamaPay is BoringBatchable {
     uint public DECIMALS_DIVISOR;
 
     event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
+    event StreamCreatedWithReason(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId, string reason);
     event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
     event StreamPaused(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
     event StreamModified(address indexed from, address indexed oldTo, uint216 oldAmountPerSec, bytes32 oldStreamId, address indexed to, uint216 amountPerSec, bytes32 newStreamId);
@@ -93,7 +94,8 @@ contract LlamaPay is BoringBatchable {
     }
 
     function createStreamWithReason(address to, uint216 amountPerSec, string calldata reason) public {
-        createStream(to, amountPerSec);
+        bytes32 streamId = _createStream(to, amountPerSec);
+        emit StreamCreatedWithReason(msg.sender, to, amountPerSec, streamId, reason);
     }
 
     /*
