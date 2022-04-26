@@ -17,14 +17,21 @@ interface IERC20WithDecimals {
 // The reason for that is to minimize precision errors caused by integer math on tokens with low decimals (eg: USDC)
 
 // Invariant through the whole contract: lastPayerUpdate[anyone] <= block.timestamp
-// Reason: timestamps can't go back in time (https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L274)
+// Reason: timestamps can't go back in time (https://github.com/ethereum/go-ethereum/blob/master/consensus/ethash/consensus.go#L274 and block timestamp definition on ethereum's yellow paper)
 // and we always set lastPayerUpdate[anyone] either to the current block.timestamp or a value lower than it
+// We could use this to optimize subtractions and avoid an unneded safemath check there for some gas savings
+// However this is obscure enough that we are not sure if a future ethereum network upgrade might remove this assertion
+// or if an ethereum fork might remove that code and invalidate the condition, causing our deployment on that chain to be vulnerable
+// This is dangerous because if someone can make a timestamp go back into the past they could steal all the money
+// So we forgo these optimizations and instead enforce this condition.
+
+// Another assumption is that all timestamps can fit in uint40, this will be true until year 231,800, so it's a safe assumption
 
 contract LlamaPay is BoringBatchable {
     using SafeERC20 for IERC20;
 
     struct Payer {
-        uint40 lastPayerUpdate; // we will only hit overflow in year 231,800 so no need to worry
+        uint40 lastPayerUpdate;
         uint216 totalPaidPerSec; // uint216 is enough to hold 1M streams of 3e51 tokens/yr, which is enough
     }
 
@@ -57,8 +64,8 @@ contract LlamaPay is BoringBatchable {
 
         Payer storage payer = payers[msg.sender];
         uint totalPaid;
+        uint delta = block.timestamp - payer.lastPayerUpdate;
         unchecked {
-            uint delta = block.timestamp - payer.lastPayerUpdate;
             totalPaid = delta * uint(payer.totalPaidPerSec);
         }
         balances[msg.sender] -= totalPaid; // implicit check that balance >= totalPaid, can't create a new stream unless there's no debt
@@ -108,8 +115,8 @@ contract LlamaPay is BoringBatchable {
 
         Payer storage payer = payers[from];
         uint totalPayerPayment;
+        uint payerDelta = block.timestamp - payer.lastPayerUpdate;
         unchecked{
-            uint payerDelta = block.timestamp - payer.lastPayerUpdate;
             totalPayerPayment = payerDelta * uint(payer.totalPaidPerSec);
         }
         uint payerBalance = balances[from];
@@ -143,8 +150,8 @@ contract LlamaPay is BoringBatchable {
 
         Payer storage payer = payers[from];
         uint totalPayerPayment;
+        uint payerDelta = block.timestamp - payer.lastPayerUpdate;
         unchecked{
-            uint payerDelta = block.timestamp - payer.lastPayerUpdate;
             totalPayerPayment = payerDelta * uint(payer.totalPaidPerSec);
         }
         uint payerBalance = balances[from];
@@ -206,8 +213,8 @@ contract LlamaPay is BoringBatchable {
     function withdrawPayer(uint amount) public {
         Payer storage payer = payers[msg.sender];
         balances[msg.sender] -= amount; // implicit check that balance > amount
+        uint delta = block.timestamp - payer.lastPayerUpdate;
         unchecked {
-            uint delta = block.timestamp - payer.lastPayerUpdate;
             require(balances[msg.sender] >= delta*uint(payer.totalPaidPerSec), "pls no rug");
             token.safeTransfer(msg.sender, amount/DECIMALS_DIVISOR);
         }
@@ -217,7 +224,9 @@ contract LlamaPay is BoringBatchable {
         Payer storage payer = payers[msg.sender];
         unchecked {
             uint delta = block.timestamp - payer.lastPayerUpdate;
-            withdrawPayer(balances[msg.sender]-delta*uint(payer.totalPaidPerSec)); // Just helper function, nothing happens if number is wrong
+            // Just helper function, nothing happens if number is wrong
+            // If there's an overflow it's just equivalent to calling withdrawPayer() directly with a big number
+            withdrawPayer(balances[msg.sender]-delta*uint(payer.totalPaidPerSec));
         }
     }
 
