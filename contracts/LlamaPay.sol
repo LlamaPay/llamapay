@@ -90,6 +90,10 @@ contract LlamaPay is BoringBatchable {
         emit StreamCreated(msg.sender, to, amountPerSec, streamId);
     }
 
+    function createStreamWithReason(address to, uint216 amountPerSec, string calldata reason) public {
+        createStream(to, amountPerSec);
+    }
+
     /*
         proof that lastUpdate < block.timestamp:
 
@@ -214,6 +218,11 @@ contract LlamaPay is BoringBatchable {
     function depositAndCreate(uint amountToDeposit, address to, uint216 amountPerSec) external {
         deposit(amountToDeposit);
         createStream(to, amountPerSec);
+    }
+
+    function depositAndCreateWithReason(uint amountToDeposit, address to, uint216 amountPerSec, string calldata reason) external {
+        deposit(amountToDeposit);
+        createStreamWithReason(to, amountPerSec, reason);
     }
 
     function withdrawPayer(uint amount) public {
