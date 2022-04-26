@@ -132,6 +132,7 @@ contract LlamaPay is BoringBatchable {
             // We push transfers to be done outside this function and at the end of public functions to avoid reentrancy exploits
             amountToTransfer = (delta*uint(amountPerSec))/DECIMALS_DIVISOR;
         }
+        emit Withdraw(from, to, amountPerSec, streamId, amountToTransfer);
     }
 
     // Copy of _withdraw that is view-only and returns how much can be withdrawn from a stream, purely for convenience on frontend
@@ -165,7 +166,6 @@ contract LlamaPay is BoringBatchable {
         streamToStart[streamId] = lastUpdate;
         payers[from].lastPayerUpdate = lastUpdate;
         token.safeTransfer(to, amountToTransfer);
-        emit Withdraw(from, to, amountPerSec, streamId, amountToTransfer);
     }
 
     function _cancelStream(address to, uint216 amountPerSec) internal returns (bytes32 streamId) {
