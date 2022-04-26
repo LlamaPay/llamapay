@@ -43,6 +43,7 @@ contract LlamaPay is BoringBatchable {
 
     event StreamCreated(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
     event StreamCancelled(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
+    event StreamPaused(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId);
     event StreamModified(address indexed from, address indexed oldTo, uint216 oldAmountPerSec, bytes32 oldStreamId, address indexed to, uint216 amountPerSec, bytes32 newStreamId);
     event Withdraw(address indexed from, address indexed to, uint216 amountPerSec, bytes32 streamId, uint amount);
 
@@ -191,6 +192,11 @@ contract LlamaPay is BoringBatchable {
     function cancelStream(address to, uint216 amountPerSec) public {
         bytes32 streamId = _cancelStream(to, amountPerSec);
         emit StreamCancelled(msg.sender, to, amountPerSec, streamId);
+    }
+
+    function pauseStream(address to, uint216 amountPerSec) public {
+        bytes32 streamId = _cancelStream(to, amountPerSec);
+        emit StreamPaused(msg.sender, to, amountPerSec, streamId);
     }
 
     function modifyStream(address oldTo, uint216 oldAmountPerSec, address to, uint216 amountPerSec) external {
