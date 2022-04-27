@@ -92,5 +92,5 @@ npm test
 npx hardhat coverage
 npx hardhat deploy --network rinkeby
 npx hardhat etherscan-verify --network rinkeby
-npx hardhat verify DEPLOYED_CONTRACT_ADDRESS --network rinkeby
+npx hardhat verify --network rinkeby DEPLOYED_CONTRACT_ADDRESS
 ```
