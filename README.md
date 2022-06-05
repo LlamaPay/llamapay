@@ -22,7 +22,7 @@ I used to handle payments by just sending transactions at the end of the month, 
 
 ### Gas costs
 Cost to create a stream:
-| Protocol | Cost (Gwei) |
+| Protocol | Cost (gas) |
 |----------|-------------|
 | LlamaPay | 69,963
 | Sablier | 240,070
