@@ -144,3 +144,6 @@ dmypy.json
 # eth-brownie
 .history
 reports/
+
+# ape
+.build

@@ -1,0 +1,9 @@
+name: llamapay
+dependencies:
+  - name: OpenZeppelin
+    github: OpenZeppelin/openzeppelin-contracts
+    version: 4.5.0
+    contracts_folder: ''
+solidity: 
+  import_remapping:
+    - "@openzeppelin/contracts=OpenZeppelin/4.5.0"
