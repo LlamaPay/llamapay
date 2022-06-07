@@ -18,6 +18,21 @@ Features:
 ## Why?
 I used to handle payments by just sending transactions at the end of the month, however that soon turned into a pain and I started looking at alternatives that could automate it. Then I started using superfluid for that, and while the concept was great, there were many small execution problems that made using it very uncomfortable. Llamapay is my attempt at scratching my own itch, to build a system that exactly fits our needs at defillama, and, as I'm sure there's other teams that could benefit from it too, we plan to open source it and release it for everyone to use.
 
+## A note for integrations: decimals
+LlamaPay uses an internal representation with 20 decimals for all it's numbers. The reason for this is to prevent math precision errors which can end up being significant (eg: if we used native decimals, a 1k/mo USDC stream becomes 994/mo instead).
+
+This has the issue that all integrations need to be mindful of that, so here are a list of methods and whether they use native token decimals or not:
+| Method | Decimals|
+|--------|---------|
+|getPayerBalance|native|
+|withdrawable|native|
+|deposit|native|
+|balances|1e20|
+|amountPerSec everywhere| 1e20|
+|createStream|1e20|
+|modifyStream|1e20|
+|withdrawPayer|1e20|
+
 ## Features
 
 ### Gas costs
