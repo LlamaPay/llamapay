@@ -33,6 +33,8 @@ This has the issue that all integrations need to be mindful of that, so here are
 |modifyStream|1e20|
 |withdrawPayer|1e20|
 
+> LlamaPay doesn't work with rebasing tokens or tokens that have fee-on-transfer
+
 ## Features
 
 ### Gas costs
