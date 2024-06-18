@@ -38,14 +38,14 @@ This has the issue that all integrations need to be mindful of that, so here are
 ## Features
 
 ### Gas costs
-Cost to create a stream:
+Cost to create a stream and fund a stream:
 | Protocol | Cost (gas) |
 |----------|-------------|
-| LlamaPay | 69,963
-| Sablier | 240,070
+| LlamaPay | 158,560
+| Sablier | 259,915
 | SuperFluid | 279,992
 
-So LlamaPay is 3.2x-3.7x cheaper than the competition!
+So LlamaPay is ~1.7x cheaper than the competition!
 
 ### No requirement on depositing all money needed for the stream
 Sablier requires you to pick a duration for each stream and deposit all the money needed for the entirety of the stream at the start. This doesn't map well to salaries, since length is indeterminate.
@@ -61,7 +61,6 @@ They can just set a CEX address and have someone else trigger withdrawals or tri
 After our public release, llamapay will be available on all EVM chains and all the contracts will share the same address across chains.
 
 ### No big precision errors
-Sablier uses the same units as the underlying token when handling math for the stream. This means that for tokens that have a low number for decimals(), such as USDC, this causes precision errors. For example: if you stream 1000 USDC to an address, you'll instead end up streaming 997 USDC instead due to these errors.
 
 LlamaPay operates internally with 20 decimals, which keep precision errors to a minimum.
 
